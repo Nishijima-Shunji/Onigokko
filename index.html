@@ -149,6 +149,19 @@ input[type=text]::placeholder{color:#444}
         <button class="tbtn" onclick="setTime(15,this)">15分</button>
         <button class="tbtn" onclick="setTime(30,this)">30分</button>
       </div>
+      <div class="lbl" style="margin-top:4px">開始時刻</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="time" id="inp-starttime" style="flex:1;background:#1c1e2a;border:1px solid #2a2d3e;border-radius:10px;padding:10px 12px;font-size:18px;color:#fff;outline:none;font-family:inherit" />
+        <button class="tbtn" onclick="setStartTimeNow()" style="flex:0 0 auto;padding:10px 12px;white-space:nowrap">今すぐ</button>
+      </div>
+      <div id="starttime-hint" style="font-size:11px;color:#555;margin-top:-4px">設定しない場合は即スタート</div>
+      <div class="lbl" style="margin-top:4px">捕獲距離</div>
+      <div class="time-row">
+        <button class="tbtn" onclick="setCapDist(3,this)">3m</button>
+        <button class="tbtn sel" onclick="setCapDist(5,this)">5m</button>
+        <button class="tbtn" onclick="setCapDist(10,this)">10m</button>
+        <button class="tbtn" onclick="setCapDist(20,this)">20m</button>
+      </div>
       <button class="btn btn-red" onclick="hostStartGame()">ゲーム開始</button>
     </div>
     <div id="guest-area" style="display:none;text-align:center;color:#555;font-size:13px;padding:8px 0">
@@ -233,7 +246,7 @@ input[type=text]::placeholder{color:#444}
 // ============================================================
 
 const COLORS = ['#e53935','#43a047','#1976d2','#f57c00','#7b1fa2','#00838f'];
-const CAPTURE_DIST = 20;
+const CAPTURE_DIST = 5;
 
 const S = {
   myId: '',
@@ -243,6 +256,8 @@ const S = {
   roomCode: '',
   selTime: 10,
   gameTime: 600,
+  capDist: 5,
+  startTime: null,
   gameStarted: false,
   isCaptured: false,
   myPos: null,
@@ -440,9 +455,15 @@ function handleMsg(d, fromId) {
     case 'START':
       S.gameTime = d.gameTime;
       S.players = d.players;
+      S.capDist = d.capDist || 5;
+      S.startTime = d.startAt || null;
       S.isOni = !!(S.players[S.myId] && S.players[S.myId].isOni);
       S.gameStarted = true;
-      startClient();
+      if (d.startAt && d.startAt > Date.now()) {
+        showStartWaiting(d.startAt, () => startClient());
+      } else {
+        startClient();
+      }
       break;
 
     case 'POS':
@@ -517,7 +538,16 @@ function updateRoomSub() {
 
 function setTime(t, el) {
   S.selTime = t;
-  document.querySelectorAll('.tbtn').forEach(b => b.classList.remove('sel'));
+  el.closest('.time-row').querySelectorAll('.tbtn').forEach(b => b.classList.remove('sel'));
+  el.classList.add('sel');
+}
+function setStartTimeNow() {
+  document.getElementById('inp-starttime').value = '';
+  document.getElementById('starttime-hint').textContent = '設定しない場合は即スタート';
+}
+function setCapDist(d, el) {
+  S.capDist = d;
+  el.closest('.time-row').querySelectorAll('.tbtn').forEach(b => b.classList.remove('sel'));
   el.classList.add('sel');
 }
 
@@ -531,8 +561,22 @@ function hostStartGame() {
   S.isOni = S.myId === oniId;
   S.gameTime = S.selTime * 60;
   S.gameStarted = true;
-  bcast({ type: 'START', players: S.players, gameTime: S.gameTime });
-  startClient();
+  // 開始時刻の取得
+  const timeVal = document.getElementById('inp-starttime').value;
+  let startAt = null;
+  if (timeVal) {
+    const now = new Date();
+    const [hh, mm] = timeVal.split(':').map(Number);
+    startAt = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0, 0).getTime();
+    if (startAt <= Date.now()) startAt = null; // 過去の時刻なら即スタート
+  }
+  S.startTime = startAt;
+  bcast({ type: 'START', players: S.players, gameTime: S.gameTime, capDist: S.capDist, startAt });
+  if (startAt) {
+    showStartWaiting(startAt, () => startClient());
+  } else {
+    startClient();
+  }
 }
 
 function startClient() {
@@ -592,7 +636,7 @@ function updateMark(pid) {
   }
   if (p.isOni) {
     if (capCircle) capCircle.setLatLng([p.lat, p.lng]);
-    else capCircle = L.circle([p.lat, p.lng], { radius: 20, color: '#e53935', fillColor: '#e53935', fillOpacity: 0.07, weight: 2, dashArray: '6,4' }).addTo(map);
+    else capCircle = L.circle([p.lat, p.lng], { radius: S.capDist, color: '#e53935', fillColor: '#e53935', fillOpacity: 0.07, weight: 2, dashArray: '6,4' }).addTo(map);
   }
 }
 
@@ -638,7 +682,7 @@ function checkCapture() {
   const [oniId, oni] = oniEntry;
   for (const [pid, p] of Object.entries(S.players)) {
     if (p.isOni || p.captured || !p.lat) continue;
-    if (dist(oni.lat, oni.lng, p.lat, p.lng) <= CAPTURE_DIST) {
+    if (dist(oni.lat, oni.lng, p.lat, p.lng) <= S.capDist) {
       p.captured = true;
       const msg = { type: 'CAPTURED', peerId: pid };
       handleMsg(msg, '__host__');
@@ -764,6 +808,48 @@ function endGame(reason) {
   onis.forEach(p => { h += `<div class="rrow"><span style="font-size:20px;width:28px">👹</span><span style="flex:1;font-size:14px;font-weight:600;margin-left:10px">${p.name||'?'}</span><span style="font-size:12px;color:#888">鬼</span></div>`; });
   runners.forEach(p => { h += `<div class="rrow"><span style="font-size:20px;width:28px">${p.captured?'🚩':'🏃'}</span><span style="flex:1;font-size:14px;font-weight:600;margin-left:10px">${p.name||'?'}</span><span style="font-size:12px;color:#888">${p.captured?'捕獲':'生存'}</span></div>`; });
   document.getElementById('e-result').innerHTML = h;
+}
+
+
+// ========== START WAITING SCREEN ==========
+function showStartWaiting(startAt, onDone) {
+  // ゲーム画面に切り替えてマップを表示（GPSは動かす）
+  showScreen('game');
+  setupSkillUI();
+  if (!map) initMap();
+  else setTimeout(() => map.invalidateSize(), 150);
+  startGPS();
+
+  // 待機オーバーレイを表示
+  let overlay = document.getElementById('start-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'start-overlay';
+    overlay.style.cssText = 'position:absolute;inset:0;background:rgba(13,15,23,0.93);z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;pointer-events:none';
+    document.getElementById('game').appendChild(overlay);
+  }
+  overlay.style.display = 'flex';
+
+  const roleText = S.isOni ? '👹 あなたは鬼 — 待機してください' : '🏃 逃走者 — 逃げる準備を！';
+  overlay.innerHTML = `
+    <div style="font-size:13px;color:#888;letter-spacing:1px">ゲーム開始まで</div>
+    <div id="sw-time" style="font-size:64px;font-weight:800;font-variant-numeric:tabular-nums;color:#e53935;line-height:1"></div>
+    <div style="font-size:14px;color:#aaa">開始時刻: <span style="color:#fff;font-weight:600">${new Date(startAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}</span></div>
+    <div style="font-size:15px;font-weight:600;margin-top:4px">${roleText}</div>
+    <div style="font-size:12px;color:#555;margin-top:4px">鬼は開始時刻まで動けません</div>`;
+
+  const iv = setInterval(() => {
+    const remaining = Math.max(0, Math.ceil((startAt - Date.now()) / 1000));
+    const m = Math.floor(remaining / 60).toString().padStart(2, '0');
+    const s = (remaining % 60).toString().padStart(2, '0');
+    const el = document.getElementById('sw-time');
+    if (el) el.textContent = `${m}:${s}`;
+    if (remaining <= 0) {
+      clearInterval(iv);
+      overlay.style.display = 'none';
+      onDone();
+    }
+  }, 500);
 }
 
 // ========== UI UTIL ==========
