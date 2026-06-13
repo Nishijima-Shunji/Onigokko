@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>鬼ごっこ</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif;background:#0f1117;color:#f0f0f0}
+.screen{display:none;height:100%;flex-direction:column;overflow:hidden}
+.screen.active{display:flex}
+
+/* HOME */
+#home{align-items:center;justify-content:center;padding:40px 28px;gap:0}
+.logo-area{text-align:center;margin-bottom:36px}
+.logo-icon{font-size:64px;line-height:1}
+.logo-title{font-size:26px;font-weight:700;letter-spacing:3px;margin-top:8px}
+.logo-sub{font-size:12px;color:#666;letter-spacing:1px;margin-top:4px}
+.home-form{width:100%;max-width:340px;display:flex;flex-direction:column;gap:12px}
+.lbl{font-size:12px;color:#777;margin-bottom:4px}
+input[type=text]{background:#1c1e2a;border:1px solid #2a2d3e;border-radius:10px;padding:13px 16px;font-size:16px;color:#fff;width:100%;outline:none;transition:border 0.2s;font-family:inherit}
+input[type=text]:focus{border-color:#e53935}
+input[type=text]::placeholder{color:#444}
+.btn{border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:600;cursor:pointer;width:100%;transition:all 0.15s;font-family:inherit}
+.btn:active{transform:scale(0.97)}
+.btn-red{background:#e53935;color:#fff}
+.btn-red:hover{background:#c62828}
+.btn-dark{background:#1c1e2a;color:#bbb;border:1px solid #2a2d3e}
+.btn-dark:hover{background:#22253a}
+.btn-gray{background:#2a2d3e;color:#aaa;font-size:14px;padding:12px}
+.divider{display:flex;align-items:center;gap:10px;color:#333;font-size:12px}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:#2a2d3e}
+
+/* ROOM */
+#room{padding:0}
+.room-top{padding:52px 20px 16px;background:#13151f}
+.room-top h2{font-size:19px;font-weight:700;margin-bottom:2px}
+.room-top p{font-size:13px;color:#666}
+.code-box{margin:12px 16px;background:#13151f;border:1px solid #2a2d3e;border-radius:14px;padding:14px 16px;text-align:center}
+.code-val{font-size:38px;font-weight:800;letter-spacing:8px;color:#e53935}
+.code-hint{font-size:11px;color:#444;margin-top:4px}
+.plist{flex:1;overflow-y:auto;padding:0 16px 8px}
+.plist-title{font-size:11px;color:#555;letter-spacing:0.8px;padding:8px 0 10px;text-transform:uppercase}
+.pitem{display:flex;align-items:center;justify-content:space-between;padding:11px 13px;background:#13151f;border-radius:10px;margin-bottom:7px}
+.pleft{display:flex;align-items:center;gap:10px}
+.av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0}
+.rbadge{font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px}
+.b-oni{background:rgba(229,57,53,0.18);color:#ef9a9a;border:1px solid rgba(229,57,53,0.3)}
+.b-run{background:rgba(67,160,71,0.18);color:#a5d6a7;border:1px solid rgba(67,160,71,0.3)}
+.room-bottom{padding:14px 16px 28px;display:flex;flex-direction:column;gap:8px}
+.time-row{display:flex;gap:7px;margin-bottom:4px}
+.tbtn{flex:1;padding:10px 4px;background:#13151f;border:1px solid #2a2d3e;border-radius:8px;color:#777;font-size:13px;cursor:pointer;transition:all 0.15s;font-family:inherit}
+.tbtn.sel{background:rgba(229,57,53,0.15);border-color:#e53935;color:#e53935;font-weight:600}
+
+/* GAME */
+#game{position:relative}
+#map{flex:1;z-index:1;min-height:0}
+.hud{position:absolute;z-index:400;left:0;right:0;pointer-events:none}
+.hud-t{top:0;padding:50px 10px 0;display:flex;gap:8px}
+.hud-b{bottom:0;padding:0 10px 24px;display:flex;flex-direction:column;gap:7px}
+.hcard{background:rgba(13,15,23,0.88);border:1px solid rgba(255,255,255,0.07);border-radius:11px;padding:9px 13px;backdrop-filter:blur(12px)}
+.timer{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;color:#fff}
+.hlbl{font-size:10px;color:#666;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:1px}
+.cap-num{font-size:18px;font-weight:700;color:#e53935}
+.gps-row{display:flex;align-items:center;gap:5px;font-size:11px;color:#666}
+.gdot{width:7px;height:7px;border-radius:50%;background:#4caf50;animation:blink 2s infinite;flex-shrink:0}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.25}}
+.dist-pill{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;padding:6px 13px;border-radius:20px;pointer-events:none}
+.dp-safe{background:rgba(46,125,50,0.22);color:#a5d6a7;border:1px solid rgba(67,160,71,0.3)}
+.dp-warn{background:rgba(245,124,0,0.22);color:#ffcc80;border:1px solid rgba(245,124,0,0.4)}
+.dp-danger{background:rgba(183,28,28,0.35);color:#ffcdd2;border:1px solid rgba(229,57,53,0.6);animation:pb 0.7s infinite}
+@keyframes pb{0%,100%{border-color:rgba(229,57,53,0.5)}50%{border-color:#e53935}}
+.skill-row{display:flex;gap:8px;pointer-events:all}
+.sk{flex:1;padding:10px 6px;background:rgba(20,22,32,0.93);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:#ccc;font-size:12px;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;transition:all 0.15s;font-family:inherit}
+.sk:active:not([disabled]){transform:scale(0.94)}
+.sk[disabled]{opacity:0.38;cursor:default}
+.sk-ic{font-size:22px}
+.sk-cd{font-size:10px;color:#555;margin-top:1px}
+.captured-toast{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:600;background:rgba(183,28,28,0.96);border:1px solid #e53935;border-radius:16px;padding:22px 36px;text-align:center;display:none;pointer-events:none}
+.captured-toast.show{display:block;animation:popIn 0.25s ease}
+@keyframes popIn{from{opacity:0;transform:translate(-50%,-50%) scale(0.8)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+
+/* END */
+#end{align-items:center;justify-content:center;padding:36px 22px;gap:18px;overflow-y:auto}
+.end-emoji{font-size:60px;text-align:center}
+.end-title{font-size:26px;font-weight:800;text-align:center}
+.end-sub{font-size:13px;color:#777;text-align:center}
+.rcard{width:100%;max-width:360px;background:#13151f;border:1px solid #2a2d3e;border-radius:14px;padding:14px}
+.rrow{display:flex;align-items:center;padding:9px 0;border-bottom:1px solid #1e2130}
+.rrow:last-child{border-bottom:none}
+
+/* MODAL */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}
+.overlay.show{display:flex}
+.modal{background:#13151f;border:1px solid #2a2d3e;border-radius:18px;padding:26px;width:100%;max-width:350px;display:flex;flex-direction:column;gap:14px}
+.modal h3{font-size:19px;font-weight:700}
+.modal p{font-size:13px;color:#777;line-height:1.6}
+.back-btn{background:none;border:none;color:#666;font-size:14px;cursor:pointer;padding:4px 0;text-align:left;font-family:inherit}
+.back-btn:hover{color:#aaa}
+.leaflet-control-attribution{display:none!important}
+.leaflet-tile{filter:brightness(0.75) saturate(0.5)}
+</style>
+</head>
+<body>
+
+<!-- HOME -->
+<div id="home" class="screen active">
+  <div class="logo-area">
+    <div class="logo-icon">🔴</div>
+    <div class="logo-title">鬼ごっこ</div>
+    <div class="logo-sub">LOCATION TAG GAME</div>
+  </div>
+  <div class="home-form">
+    <div>
+      <div class="lbl">プレイヤー名</div>
+      <input type="text" id="inp-name" placeholder="名前を入力" maxlength="10"/>
+    </div>
+    <button class="btn btn-red" onclick="goCreate()">部屋を作る</button>
+    <div class="divider">または</div>
+    <button class="btn btn-dark" onclick="openJoin()">コードで参加する</button>
+  </div>
+</div>
+
+<!-- ROOM -->
+<div id="room" class="screen">
+  <div class="room-top">
+    <button class="back-btn" onclick="leaveRoom()">← ホームへ</button>
+    <h2 id="room-h">待機中...</h2>
+    <p id="room-sub">接続中...</p>
+  </div>
+  <div class="code-box">
+    <div class="lbl" style="text-align:center">参加コード</div>
+    <div class="code-val" id="code-disp">------</div>
+    <div class="code-hint">このコードを友達に共有してください</div>
+  </div>
+  <div class="plist">
+    <div class="plist-title">参加者</div>
+    <div id="plist-body"></div>
+  </div>
+  <div class="room-bottom">
+    <div id="host-area" style="display:none;flex-direction:column;gap:8px">
+      <div class="lbl">制限時間</div>
+      <div class="time-row">
+        <button class="tbtn" onclick="setTime(5,this)">5分</button>
+        <button class="tbtn sel" onclick="setTime(10,this)">10分</button>
+        <button class="tbtn" onclick="setTime(15,this)">15分</button>
+        <button class="tbtn" onclick="setTime(30,this)">30分</button>
+      </div>
+      <button class="btn btn-red" onclick="hostStartGame()">ゲーム開始</button>
+    </div>
+    <div id="guest-area" style="display:none;text-align:center;color:#555;font-size:13px;padding:8px 0">
+      ホストがゲームを開始するのを待っています...
+    </div>
+  </div>
+</div>
+
+<!-- GAME -->
+<div id="game" class="screen">
+  <div id="map"></div>
+  <div class="hud hud-t">
+    <div class="hcard" style="flex:1">
+      <div class="hlbl">残り時間</div>
+      <div class="timer" id="g-timer">--:--</div>
+    </div>
+    <div class="hcard" style="text-align:center;min-width:66px">
+      <div class="hlbl">捕獲</div>
+      <div class="cap-num" id="g-cap">0/0</div>
+    </div>
+    <div class="hcard">
+      <div class="gps-row"><span class="gdot"></span><span id="g-gps">GPS</span></div>
+    </div>
+  </div>
+  <div class="hud" style="top:130px;left:10px;pointer-events:none" id="dist-area"></div>
+  <div class="hud hud-b">
+    <div class="skill-row" id="skill-row"></div>
+  </div>
+  <div class="captured-toast" id="cap-toast">
+    <div style="font-size:34px">🚩</div>
+    <div style="font-size:18px;font-weight:800;margin-top:6px">捕まった！</div>
+    <div style="font-size:12px;color:#ffcdd2;margin-top:3px">鬼に捕獲されました</div>
+  </div>
+</div>
+
+<!-- END -->
+<div id="end" class="screen">
+  <div class="end-emoji" id="e-emoji">🎉</div>
+  <div class="end-title" id="e-title">ゲーム終了</div>
+  <div class="end-sub" id="e-sub"></div>
+  <div class="rcard" id="e-result"></div>
+  <button class="btn btn-red" style="max-width:340px;width:100%;margin-top:4px" onclick="backHome()">ホームへ戻る</button>
+</div>
+
+<!-- JOIN MODAL -->
+<div class="overlay" id="modal-join">
+  <div class="modal">
+    <h3>コードで参加</h3>
+    <div>
+      <div class="lbl">参加コード（6文字）</div>
+      <input type="text" id="inp-code" placeholder="例: ABC123" maxlength="6"
+        style="text-transform:uppercase;text-align:center;font-size:24px;letter-spacing:6px"/>
+    </div>
+    <button class="btn btn-red" onclick="doJoin()">入室する</button>
+    <button class="btn btn-gray" onclick="closeModal('modal-join')">キャンセル</button>
+  </div>
+</div>
+
+<!-- ERROR MODAL -->
+<div class="overlay" id="modal-err">
+  <div class="modal">
+    <h3 id="err-title">エラー</h3>
+    <p id="err-msg" style="white-space:pre-line"></p>
+    <button class="btn btn-gray" onclick="closeModal('modal-err')">閉じる</button>
+  </div>
+</div>
+
+<!-- LOADING MODAL -->
+<div class="overlay" id="modal-load">
+  <div class="modal" style="align-items:center;text-align:center">
+    <div style="font-size:32px">⏳</div>
+    <h3 id="load-msg">接続中...</h3>
+    <p>しばらくお待ちください</p>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// PeerJS Star型トポロジー
+// ルームコード = ホストのPeer ID（6文字固定）
+// ゲストはそのIDに直接接続するだけ → Firebaseなしで通信可能
+// ============================================================
+
+const COLORS = ['#e53935','#43a047','#1976d2','#f57c00','#7b1fa2','#00838f'];
+const CAPTURE_DIST = 20;
+
+const S = {
+  myId: '',
+  name: '',
+  isHost: false,
+  isOni: false,
+  roomCode: '',
+  selTime: 10,
+  gameTime: 600,
+  gameStarted: false,
+  isCaptured: false,
+  myPos: null,
+  players: {},
+  skillCD: { scan: 0 },
+  hideActive: false,
+};
+
+let peer = null;
+let hostConn = null;
+let guestConns = {};
+let map = null, pMarkers = {}, capCircle = null;
+let timerIv = null;
+
+// ========== PEER ==========
+
+function makePeer(customId, onOpen, onError) {
+  const cfg = {
+    host: '0.peerjs.com', port: 443, secure: true, path: '/',
+    debug: 0,
+    config: { iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ]}
+  };
+  const p = customId ? new Peer(customId, cfg) : new Peer(undefined, cfg);
+  p.on('open', id => onOpen(id));
+  p.on('error', e => onError(e));
+  return p;
+}
+
+function generateCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let s = '';
+  for (let i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return s;
+}
+
+// ========== HOST ==========
+
+function goCreate() {
+  const name = document.getElementById('inp-name').value.trim();
+  if (!name) { showErr('名前を入力してください'); return; }
+  S.name = name;
+  S.isHost = true;
+
+  const tryCreate = (code) => {
+    showLoad('部屋を作成中...');
+    peer = makePeer(code,
+      (id) => {
+        S.myId = id;
+        S.roomCode = id;
+        S.players[S.myId] = { name: S.name, isOni: false, captured: false, lat: null, lng: null };
+        peer.on('connection', conn => setupGuestConn(conn));
+        closeModal('modal-load');
+        document.getElementById('code-disp').textContent = S.roomCode;
+        document.getElementById('room-h').textContent = '部屋を作りました';
+        document.getElementById('room-sub').textContent = 'ホスト · 1人接続中';
+        document.getElementById('host-area').style.display = 'flex';
+        document.getElementById('guest-area').style.display = 'none';
+        renderPList();
+        showScreen('room');
+      },
+      (e) => {
+        closeModal('modal-load');
+        if (e.type === 'unavailable-id') {
+          tryCreate(generateCode());
+        } else {
+          showErr('接続エラー: ' + e.type + '\nページを再読み込みしてください');
+        }
+      }
+    );
+  };
+  tryCreate(generateCode());
+}
+
+function setupGuestConn(conn) {
+  conn.on('open', () => {
+    guestConns[conn.peer] = conn;
+    // 現在の全状態を送る
+    conn.send({ type: 'SYNC_STATE', players: S.players, gameTime: S.gameTime, gameStarted: S.gameStarted });
+    updateRoomSub();
+  });
+  conn.on('data', d => handleMsg(d, conn.peer));
+  conn.on('close', () => {
+    delete guestConns[conn.peer];
+    delete S.players[conn.peer];
+    bcast({ type: 'PLAYER_LEAVE', peerId: conn.peer });
+    renderPList();
+    updateRoomSub();
+  });
+}
+
+// ========== GUEST ==========
+
+function openJoin() {
+  const name = document.getElementById('inp-name').value.trim();
+  if (!name) { showErr('名前を入力してください'); return; }
+  S.name = name;
+  document.getElementById('inp-code').value = '';
+  showModal('modal-join');
+}
+
+function doJoin() {
+  const code = document.getElementById('inp-code').value.trim().toUpperCase();
+  if (code.length < 6) { showErr('コードを入力してください'); return; }
+  closeModal('modal-join');
+  S.isHost = false;
+  S.roomCode = code;
+  showLoad('接続中...');
+
+  peer = makePeer(null,
+    (myId) => {
+      S.myId = myId;
+      hostConn = peer.connect(code, { reliable: true });
+      let opened = false;
+      const timeout = setTimeout(() => {
+        if (!opened) {
+          closeModal('modal-load');
+          showErr('接続タイムアウト。\nコードが正しいか確認してください。\nホストが先に部屋を作る必要があります。');
+        }
+      }, 12000);
+
+      hostConn.on('open', () => {
+        opened = true;
+        clearTimeout(timeout);
+        hostConn.send({ type: 'JOIN', peerId: S.myId, name: S.name });
+        closeModal('modal-load');
+        document.getElementById('code-disp').textContent = code;
+        document.getElementById('room-h').textContent = '入室しました';
+        document.getElementById('room-sub').textContent = 'ゲスト';
+        document.getElementById('host-area').style.display = 'none';
+        document.getElementById('guest-area').style.display = 'block';
+        showScreen('room');
+      });
+      hostConn.on('data', d => handleMsg(d, 'host'));
+      hostConn.on('close', () => showErr('ホストとの接続が切れました'));
+      hostConn.on('error', e => {
+        clearTimeout(timeout);
+        closeModal('modal-load');
+        showErr('接続失敗: ' + e.type);
+      });
+    },
+    (e) => {
+      closeModal('modal-load');
+      showErr('初期化エラー: ' + e.type);
+    }
+  );
+}
+
+// ========== MESSAGING ==========
+
+function bcast(msg) {
+  Object.values(guestConns).forEach(c => { if (c.open) c.send(msg); });
+}
+
+function sendHost(msg) {
+  if (S.isHost) {
+    handleMsg(msg, S.myId);
+  } else if (hostConn && hostConn.open) {
+    hostConn.send(msg);
+  }
+}
+
+function handleMsg(d, fromId) {
+  switch (d.type) {
+
+    case 'JOIN':
+      // ホストのみ処理
+      if (!S.isHost) break;
+      S.players[d.peerId] = { name: d.name, isOni: false, captured: false, lat: null, lng: null };
+      bcast({ type: 'PLAYER_JOIN', peerId: d.peerId, name: d.name });
+      renderPList();
+      updateRoomSub();
+      break;
+
+    case 'SYNC_STATE':
+      S.players = d.players || {};
+      S.gameTime = d.gameTime || S.gameTime;
+      if (d.gameStarted && !S.gameStarted) { S.gameStarted = true; startClient(); }
+      renderPList();
+      break;
+
+    case 'PLAYER_JOIN':
+      S.players[d.peerId] = { name: d.name, isOni: false, captured: false, lat: null, lng: null };
+      renderPList();
+      break;
+
+    case 'PLAYER_LEAVE':
+      delete S.players[d.peerId];
+      renderPList();
+      if (pMarkers[d.peerId] && map) { map.removeLayer(pMarkers[d.peerId]); delete pMarkers[d.peerId]; }
+      break;
+
+    case 'START':
+      S.gameTime = d.gameTime;
+      S.players = d.players;
+      S.isOni = !!(S.players[S.myId] && S.players[S.myId].isOni);
+      S.gameStarted = true;
+      startClient();
+      break;
+
+    case 'POS':
+      // ホスト: 中継 + 捕獲判定
+      if (S.isHost && d.peerId !== S.myId) {
+        if (S.players[d.peerId]) { S.players[d.peerId].lat = d.lat; S.players[d.peerId].lng = d.lng; }
+        bcast(d);
+        checkCapture();
+      }
+      // 全員: マーカー更新
+      if (d.peerId !== S.myId && S.players[d.peerId]) {
+        S.players[d.peerId].lat = d.lat;
+        S.players[d.peerId].lng = d.lng;
+        updateMark(d.peerId);
+        if (!S.isOni) updateDist();
+        updateCapDisplay();
+      }
+      break;
+
+    case 'CAPTURED':
+      if (S.players[d.peerId]) S.players[d.peerId].captured = true;
+      updateMark(d.peerId);
+      updateCapDisplay();
+      if (d.peerId === S.myId && !S.isCaptured) {
+        S.isCaptured = true;
+        document.getElementById('cap-toast').classList.add('show');
+        setTimeout(() => document.getElementById('cap-toast').classList.remove('show'), 3000);
+      }
+      if (S.isHost) {
+        bcast(d);
+        checkAllCap();
+      }
+      break;
+
+    case 'TIMER':
+      if (!S.isHost) { S.gameTime = d.t; updateTimerEl(); }
+      break;
+
+    case 'END':
+      endGame(d.reason);
+      break;
+  }
+}
+
+// ========== ROOM ==========
+
+function renderPList() {
+  const entries = Object.entries(S.players);
+  let h = '';
+  entries.forEach(([pid, p], i) => {
+    const isMe = pid === S.myId;
+    const isHost = S.isHost ? pid === S.myId : pid === S.roomCode;
+    const col = COLORS[i % COLORS.length];
+    h += `<div class="pitem">
+      <div class="pleft">
+        <div class="av" style="background:${col}22;color:${col};border:1px solid ${col}40">${(p.name||'?').charAt(0)}</div>
+        <div>
+          <div style="font-size:15px;font-weight:600">${p.name||'?'}${isMe?' <span style="font-size:11px;color:#555">(あなた)</span>':''}</div>
+          <div style="font-size:11px;color:#444">${isHost?'ホスト':'ゲスト'}</div>
+        </div>
+      </div>
+      <span class="rbadge ${p.isOni?'b-oni':'b-run'}">${p.isOni?'👹 鬼':'🏃 逃走者'}</span>
+    </div>`;
+  });
+  document.getElementById('plist-body').innerHTML = h || '<div style="color:#444;font-size:13px;padding:8px 0">まだ誰もいません</div>';
+}
+
+function updateRoomSub() {
+  const n = Object.keys(S.players).length;
+  document.getElementById('room-sub').textContent = `ホスト · ${n}人接続中`;
+}
+
+function setTime(t, el) {
+  S.selTime = t;
+  document.querySelectorAll('.tbtn').forEach(b => b.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+// ========== GAME START ==========
+
+function hostStartGame() {
+  const pids = Object.keys(S.players);
+  if (pids.length < 2) { showErr('最低2人必要です'); return; }
+  const oniId = pids[Math.floor(Math.random() * pids.length)];
+  pids.forEach(pid => { S.players[pid].isOni = (pid === oniId); });
+  S.isOni = S.myId === oniId;
+  S.gameTime = S.selTime * 60;
+  S.gameStarted = true;
+  bcast({ type: 'START', players: S.players, gameTime: S.gameTime });
+  startClient();
+}
+
+function startClient() {
+  showScreen('game');
+  setupSkillUI();
+  if (!map) initMap();
+  else setTimeout(() => map.invalidateSize(), 150);
+  startGPS();
+  if (S.isHost) {
+    timerIv = setInterval(() => {
+      S.gameTime--;
+      updateTimerEl();
+      bcast({ type: 'TIMER', t: S.gameTime });
+      if (S.gameTime <= 0) { clearInterval(timerIv); bcastEnd('timeout'); }
+    }, 1000);
+  }
+  updateTimerEl();
+  updateCapDisplay();
+}
+
+// ========== MAP ==========
+
+function initMap() {
+  const lat = S.myPos ? S.myPos.lat : 34.6937;
+  const lng = S.myPos ? S.myPos.lng : 135.5023;
+  map = L.map('map', { zoomControl: false, attributionControl: false }).setView([lat, lng], 17);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+  L.control.zoom({ position: 'topright' }).addTo(map);
+}
+
+function mkIcon(pid, p) {
+  const isMe = pid === S.myId;
+  const bg = p.captured ? '#444' : p.isOni ? '#e53935' : isMe ? '#1976d2' : '#43a047';
+  const sz = p.isOni ? 44 : 38;
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${bg};border:${isMe?'3px':'2px'} solid #fff;display:flex;align-items:center;justify-content:center;font-size:${p.isOni?14:12}px;font-weight:700;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,0.6);opacity:${p.captured?0.4:1}">${(p.name||'?').charAt(0)}</div>`,
+    iconSize: [sz, sz], iconAnchor: [sz/2, sz/2]
+  });
+}
+
+function updateMark(pid) {
+  if (!map) return;
+  const p = S.players[pid];
+  if (!p || !p.lat) return;
+  if (!S.isOni && pid !== S.myId && !p.isOni) {
+    if (pMarkers[pid]) { map.removeLayer(pMarkers[pid]); delete pMarkers[pid]; }
+    return;
+  }
+  const icon = mkIcon(pid, p);
+  if (pMarkers[pid]) {
+    pMarkers[pid].setLatLng([p.lat, p.lng]);
+    pMarkers[pid].setIcon(icon);
+  } else {
+    pMarkers[pid] = L.marker([p.lat, p.lng], { icon }).addTo(map)
+      .bindTooltip(p.name || '?', { permanent: false, direction: 'top' });
+  }
+  if (p.isOni) {
+    if (capCircle) capCircle.setLatLng([p.lat, p.lng]);
+    else capCircle = L.circle([p.lat, p.lng], { radius: 20, color: '#e53935', fillColor: '#e53935', fillOpacity: 0.07, weight: 2, dashArray: '6,4' }).addTo(map);
+  }
+}
+
+// ========== GPS ==========
+
+function startGPS() {
+  if (!navigator.geolocation) { document.getElementById('g-gps').textContent = '未対応'; return; }
+  navigator.geolocation.watchPosition(pos => {
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+    S.myPos = { lat, lng };
+    document.getElementById('g-gps').textContent = '±' + Math.round(pos.coords.accuracy) + 'm';
+    map && map.setView([lat, lng], map.getZoom(), { animate: true });
+    if (S.players[S.myId]) { S.players[S.myId].lat = lat; S.players[S.myId].lng = lng; }
+    updateMark(S.myId);
+    if (!S.hideActive && !S.isCaptured) {
+      const msg = { type: 'POS', peerId: S.myId, lat, lng };
+      if (S.isHost) {
+        bcast(msg);
+        checkCapture();
+      } else {
+        sendHost(msg);
+      }
+    }
+    if (!S.isOni) updateDist();
+    updateCapDisplay();
+  }, () => { document.getElementById('g-gps').textContent = 'GPS失敗'; },
+  { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 });
+}
+
+// ========== CAPTURE ==========
+
+function dist(lat1, lng1, lat2, lng2) {
+  const R = 6371000, dl = (lat2-lat1)*Math.PI/180, dn = (lng2-lng1)*Math.PI/180;
+  const a = Math.sin(dl/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dn/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function checkCapture() {
+  if (!S.isHost) return;
+  const oniEntry = Object.entries(S.players).find(([,p]) => p.isOni);
+  if (!oniEntry || !oniEntry[1].lat) return;
+  const [oniId, oni] = oniEntry;
+  for (const [pid, p] of Object.entries(S.players)) {
+    if (p.isOni || p.captured || !p.lat) continue;
+    if (dist(oni.lat, oni.lng, p.lat, p.lng) <= CAPTURE_DIST) {
+      p.captured = true;
+      const msg = { type: 'CAPTURED', peerId: pid };
+      handleMsg(msg, '__host__');
+    }
+  }
+}
+
+function checkAllCap() {
+  const runners = Object.values(S.players).filter(p => !p.isOni);
+  if (runners.length > 0 && runners.every(p => p.captured)) bcastEnd('allCaptured');
+}
+
+function bcastEnd(reason) {
+  const msg = { type: 'END', reason };
+  bcast(msg);
+  endGame(reason);
+}
+
+function updateCapDisplay() {
+  const runners = Object.values(S.players).filter(p => !p.isOni);
+  const n = runners.filter(p => p.captured).length;
+  const el = document.getElementById('g-cap');
+  if (el) el.textContent = `${n}/${runners.length}`;
+}
+
+function updateDist() {
+  if (S.isOni) return;
+  const oni = Object.values(S.players).find(p => p.isOni);
+  const el = document.getElementById('dist-area');
+  if (!oni || !oni.lat || !S.myPos) { if (el) el.innerHTML=''; return; }
+  const d = Math.round(dist(S.myPos.lat, S.myPos.lng, oni.lat, oni.lng));
+  let cls = 'dp-safe', lbl = '安全';
+  if (d < 30) { cls = 'dp-danger'; lbl = '危険！'; }
+  else if (d < 80) { cls = 'dp-warn'; lbl = '注意'; }
+  if (el) el.innerHTML = `<span class="dist-pill ${cls}">🔴 鬼まで約${d}m — ${lbl}</span>`;
+}
+
+// ========== TIMER ==========
+
+function updateTimerEl() {
+  const m = Math.floor(S.gameTime/60).toString().padStart(2,'0');
+  const s = (S.gameTime%60).toString().padStart(2,'0');
+  const el = document.getElementById('g-timer');
+  if (el) { el.textContent = `${m}:${s}`; el.style.color = S.gameTime <= 30 ? '#e53935' : '#fff'; }
+}
+
+// ========== SKILLS ==========
+
+function setupSkillUI() {
+  const row = document.getElementById('skill-row');
+  if (S.isOni) {
+    row.innerHTML = `<button class="sk" id="sk-scan" onclick="useSkill('scan')">
+      <span class="sk-ic">📡</span><span>スキャン</span>
+      <span class="sk-cd" id="cd-scan">半径100m / CT15秒</span></button>`;
+  } else {
+    row.innerHTML = `
+      <button class="sk" id="sk-hide" onclick="useSkill('hide')">
+        <span class="sk-ic">👻</span><span>位置非表示</span>
+        <span class="sk-cd" id="cd-hide">60秒 / 1回</span></button>
+      <button class="sk" id="sk-decoy" onclick="useSkill('decoy')">
+        <span class="sk-ic">🎭</span><span>デコイ</span>
+        <span class="sk-cd" id="cd-decoy">1回限り</span></button>`;
+  }
+}
+
+function useSkill(name) {
+  if (name === 'scan') {
+    if (S.skillCD.scan > 0) return;
+    S.skillCD.scan = 15;
+    const btn = document.getElementById('sk-scan');
+    btn.disabled = true;
+    if (map && S.myPos) {
+      const ring = L.circle([S.myPos.lat, S.myPos.lng], { radius:100, color:'#64b5f6', fillOpacity:0.06, weight:2, dashArray:'4,4' }).addTo(map);
+      setTimeout(() => map.removeLayer(ring), 3000);
+    }
+    let t = 15;
+    const iv = setInterval(() => {
+      t--; S.skillCD.scan = t;
+      const el = document.getElementById('cd-scan');
+      if (el) el.textContent = `CT: ${t}秒`;
+      if (t <= 0) { clearInterval(iv); btn.disabled=false; if(el) el.textContent='半径100m / CT15秒'; }
+    }, 1000);
+  } else if (name === 'hide') {
+    const btn = document.getElementById('sk-hide');
+    if (btn.disabled) return;
+    btn.disabled = true; S.hideActive = true;
+    let t = 60;
+    const iv = setInterval(() => {
+      t--;
+      const el = document.getElementById('cd-hide');
+      if (el) el.textContent = `非表示中 ${t}秒`;
+      if (t <= 0) { clearInterval(iv); S.hideActive=false; if(el) el.textContent='使用済み'; }
+    }, 1000);
+  } else if (name === 'decoy') {
+    const btn = document.getElementById('sk-decoy');
+    if (btn.disabled || !S.myPos) return;
+    btn.disabled = true;
+    const dLat = S.myPos.lat + (Math.random()-0.5)*0.0006;
+    const dLng = S.myPos.lng + (Math.random()-0.5)*0.0006;
+    sendHost({ type: 'POS', peerId: S.myId, lat: dLat, lng: dLng });
+    if (map) {
+      const di = L.divIcon({ className:'', html:'<div style="width:30px;height:30px;border-radius:50%;background:#78909c;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;opacity:0.6">囮</div>', iconSize:[30,30], iconAnchor:[15,15] });
+      const dm = L.marker([dLat, dLng], { icon:di }).addTo(map);
+      setTimeout(() => map.removeLayer(dm), 30000);
+    }
+    const el = document.getElementById('cd-decoy');
+    if (el) el.textContent = '使用済み';
+  }
+}
+
+// ========== END ==========
+
+function endGame(reason) {
+  clearInterval(timerIv);
+  showScreen('end');
+  const onis = Object.values(S.players).filter(p => p.isOni);
+  const runners = Object.values(S.players).filter(p => !p.isOni);
+  const allCap = runners.every(p => p.captured);
+  document.getElementById('e-emoji').textContent = allCap ? '👹' : '🏃';
+  document.getElementById('e-title').textContent = allCap ? '鬼の勝利！' : '逃走者の勝利！';
+  document.getElementById('e-sub').textContent = allCap ? '全員捕獲されました' : '制限時間まで逃げ切りました';
+  let h = '';
+  onis.forEach(p => { h += `<div class="rrow"><span style="font-size:20px;width:28px">👹</span><span style="flex:1;font-size:14px;font-weight:600;margin-left:10px">${p.name||'?'}</span><span style="font-size:12px;color:#888">鬼</span></div>`; });
+  runners.forEach(p => { h += `<div class="rrow"><span style="font-size:20px;width:28px">${p.captured?'🚩':'🏃'}</span><span style="flex:1;font-size:14px;font-weight:600;margin-left:10px">${p.name||'?'}</span><span style="font-size:12px;color:#888">${p.captured?'捕獲':'生存'}</span></div>`; });
+  document.getElementById('e-result').innerHTML = h;
+}
+
+// ========== UI UTIL ==========
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if (id === 'game' && map) setTimeout(() => map.invalidateSize(), 150);
+}
+function showModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+function showLoad(msg) { document.getElementById('load-msg').textContent = msg; showModal('modal-load'); }
+function showErr(msg) { document.getElementById('err-msg').textContent = msg; showModal('modal-err'); }
+
+function leaveRoom() {
+  if (peer) { peer.destroy(); peer = null; }
+  hostConn = null; guestConns = {}; S.players = {};
+  showScreen('home');
+}
+
+function backHome() {
+  clearInterval(timerIv);
+  if (peer) { peer.destroy(); peer = null; }
+  hostConn = null; guestConns = {}; S.players = {};
+  S.gameStarted = false; S.isCaptured = false;
+  if (map) { map.remove(); map = null; pMarkers = {}; capCircle = null; }
+  showScreen('home');
+}
+
+// GPS事前取得
+navigator.geolocation && navigator.geolocation.getCurrentPosition(
+  p => { S.myPos = { lat: p.coords.latitude, lng: p.coords.longitude }; }, () => {}
+);
+</script>
+</body>
+</html>
